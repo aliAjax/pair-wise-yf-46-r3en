@@ -12,6 +12,8 @@ import { SortableItem } from "./components/SortableItem";
 import { useGetRundownQuery, useSaveRundownMutation } from "./store/api";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
 import { addItem, adjustDuration, initialize, insertBreaking, queueChange, reorder, setOnline, setRole, skipItem, syncQueue, undo, updateStatus } from "./store/rundownSlice";
+import { backfillInitial } from "./store/scheduleSlice";
+import { ReconcilePage } from "./components/ReconcilePage";
 import type { ItemType, Role, RundownItem } from "./types";
 
 const schema = z.object({ title: z.string().min(2), type: z.enum(["新闻片", "连线", "嘉宾", "口播", "广告"]), duration: z.number().min(1).max(120), presenter: z.string().min(1), source: z.string().min(1) });
@@ -104,16 +106,21 @@ function dispatchSync() {
 export default function App() {
   const dispatch = useAppDispatch();
   const state = useAppSelector((root) => root.rundown);
+  const schedule = useAppSelector((root) => root.schedule);
   const { data = [] } = useGetRundownQuery();
   const { t, i18n } = useTranslation();
   useEffect(() => { if (data.length) dispatch(initialize(data)); }, [data, dispatch]);
+  useEffect(() => {
+    const source = data.length ? data : state.items;
+    if (source.length && !schedule.versions.length) dispatch(backfillInitial(source));
+  }, [data, state.items, schedule.versions.length, dispatch]);
   useEffect(() => {
     const handler = () => { dispatch(syncQueue()); message.success("应急队列已同步"); };
     window.addEventListener("sync-queue", handler);
     return () => window.removeEventListener("sync-queue", handler);
   }, [dispatch]);
   return <div className="app-shell">
-    <aside className="sidebar"><div className="brand"><span>LIVE</span><div><b>{t("title")}</b><small>Control room</small></div></div><nav><NavLink to="/">{t("rundown")}</NavLink><NavLink to="/changes">{t("changes")}</NavLink><NavLink to="/queue">{t("queue")} {state.queue.length ? <em>{state.queue.length}</em> : null}</NavLink></nav><Button ghost onClick={() => void i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")}>{i18n.language === "zh" ? "EN" : "中文"}</Button></aside>
-    <main><header className="topbar"><div><small>直播运行中 · 紧急操作均保留审计记录</small><h1>{t("title")}</h1></div><div className="top-actions"><label>在线模式 <Switch checked={state.online} onChange={(value) => dispatch(setOnline(value))} /></label><label>当前岗位 <Select<Role> value={state.role} onChange={(value) => dispatch(setRole(value))} options={[{value:"导播"},{value:"主编"},{value:"字幕"},{value:"演播室"}]} /></label></div></header><Routes><Route path="/" element={<RundownPage />} /><Route path="/changes" element={<ChainPage mode="changes" />} /><Route path="/queue" element={<ChainPage mode="queue" />} /><Route path="/history" element={<ChainPage mode="history" />} /></Routes></main>
+    <aside className="sidebar"><div className="brand"><span>LIVE</span><div><b>{t("title")}</b><small>Control room</small></div></div><nav><NavLink to="/">{t("rundown")}</NavLink><NavLink to="/reconcile">{t("reconcile")}</NavLink><NavLink to="/changes">{t("changes")}</NavLink><NavLink to="/queue">{t("queue")} {state.queue.length ? <em>{state.queue.length}</em> : null}</NavLink></nav><Button ghost onClick={() => void i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")}>{i18n.language === "zh" ? "EN" : "中文"}</Button></aside>
+    <main><header className="topbar"><div><small>直播运行中 · 紧急操作均保留审计记录</small><h1>{t("title")}</h1></div><div className="top-actions"><label>在线模式 <Switch checked={state.online} onChange={(value) => dispatch(setOnline(value))} /></label><label>当前岗位 <Select<Role> value={state.role} onChange={(value) => dispatch(setRole(value))} options={[{value:"导播"},{value:"主编"},{value:"字幕"},{value:"演播室"}]} /></label></div></header><Routes><Route path="/" element={<RundownPage />} /><Route path="/reconcile" element={<ReconcilePage />} /><Route path="/changes" element={<ChainPage mode="changes" />} /><Route path="/queue" element={<ChainPage mode="queue" />} /><Route path="/history" element={<ChainPage mode="history" />} /></Routes></main>
   </div>;
 }
